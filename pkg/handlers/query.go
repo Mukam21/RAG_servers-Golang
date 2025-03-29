@@ -9,71 +9,37 @@ import (
 )
 
 type QueryRequest struct {
-	Content string `json:"content" binding:"required"`
+	Query string `json:"query" binding:"required"`
 }
 
 func Query(c *gin.Context) {
 	var req QueryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
 		return
 	}
 
-	trimmedContent := strings.TrimSpace(req.Content)
-	if len(trimmedContent) < 3 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "query content must be at least 3 characters long"})
+	trimmedQuery := strings.TrimSpace(req.Query)
+	if len(trimmedQuery) < 3 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Query must be at least 3 characters long"})
 		return
 	}
 
-	// Каналы для результатов и ошибок
-	embeddingChan := make(chan []float32, 1)
-	errChan := make(chan error, 2)
-
-	// Асинхронно получаем эмбеддинг
-	go func() {
-		embedding, err := services.GetEmbedding(trimmedContent)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		embeddingChan <- embedding
-	}()
-
-	// Ждем эмбеддинг
-	var queryEmbedding []float32
-	select {
-	case embedding := <-embeddingChan:
-		queryEmbedding = embedding
-	case err := <-errChan:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get query embedding: " + err.Error()})
-		return
-	}
-
-	// Асинхронно ищем документы
-	contextChan := make(chan string, 1)
-	go func() {
-		context, err := services.SearchDocuments(queryEmbedding)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		contextChan <- context
-	}()
-
-	// Ждем контекст
-	var context string
-	select {
-	case ctx := <-contextChan:
-		context = ctx
-	case err := <-errChan:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search documents: " + err.Error()})
-		return
-	}
-
-	// Генерируем ответ с помощью LLM
-	response, err := services.GenerateResponse(trimmedContent, context)
+	embedding, err := services.GetEmbedding(trimmedQuery)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate response: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get query embedding: " + err.Error()})
+		return
+	}
+
+	context, err := services.SearchDocuments(embedding)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search documents: " + err.Error()})
+		return
+	}
+
+	response, err := services.GenerateResponse(trimmedQuery, context)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate response: " + err.Error()})
 		return
 	}
 

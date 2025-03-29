@@ -4,22 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
 )
 
-const embeddingEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent?key="
+const (
+	embeddingEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent?key="
+	generateEndpoint  = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key="
+)
 
-// GetEmbedding fetches an embedding for the given text using the Google Gemini API
 func GetEmbedding(text string) ([]float32, error) {
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 	if geminiAPIKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY environment variable not set")
 	}
 
-	// Form the correct payload
 	payload := map[string]interface{}{
 		"model": "models/embedding-001",
 		"content": map[string]interface{}{
@@ -33,7 +34,6 @@ func GetEmbedding(text string) ([]float32, error) {
 		return nil, fmt.Errorf("failed to marshal payload: %v", err)
 	}
 
-	log.Println("Sending request to Gemini API for embedding:", text)
 	resp, err := http.Post(embeddingEndpoint+geminiAPIKey, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request to Gemini API: %v", err)
@@ -41,12 +41,12 @@ func GetEmbedding(text string) ([]float32, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := ioutil.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		log.Println("Gemini API embedding request failed:", string(respBody))
 		return nil, fmt.Errorf("Gemini API embedding request failed with status %s: %s", resp.Status, string(respBody))
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
@@ -60,7 +60,6 @@ func GetEmbedding(text string) ([]float32, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
-	log.Println("Successfully fetched embedding for text:", text)
 	return result.Embedding.Values, nil
 }
 
@@ -82,18 +81,18 @@ func GenerateResponse(query, context string) (string, error) {
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal payload: %v", err)
 	}
 
-	resp, err := http.Post("https://api.gemini.com/v1/generateContent?key="+apiKey, "application/json", bytes.NewBuffer(body))
+	resp, err := http.Post(generateEndpoint+apiKey, "application/json", bytes.NewBuffer(body))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to send request to Gemini API: %v", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	var result struct {
@@ -106,11 +105,11 @@ func GenerateResponse(query, context string) (string, error) {
 		} `json:"candidates"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
 	if len(result.Candidates) > 0 && len(result.Candidates[0].Content.Parts) > 0 {
 		return result.Candidates[0].Content.Parts[0].Text, nil
 	}
-	return "", fmt.Errorf("no response from API")
+	return "", fmt.Errorf("no response from Gemini API")
 }

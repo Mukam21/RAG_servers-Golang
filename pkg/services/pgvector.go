@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -11,9 +12,12 @@ var pgConn *pgx.Conn
 
 func init() {
 	var err error
-	// Подключаемся к PostgreSQL
-	connStr := "postgres://postgres:raggolang@localhost:5438/postgres?sslmode=disable"
-	pgConn, err := pgx.Connect(context.Background(), connStr)
+	password := os.Getenv("PG_PASSWORD")
+	if password == "" {
+		panic("PG_PASSWORD environment variable not set")
+	}
+	connStr := fmt.Sprintf("postgres://postgres:%s@localhost:5438/postgres?sslmode=disable", password)
+	pgConn, err = pgx.Connect(context.Background(), connStr)
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect to PostgreSQL: %v", err))
 	}
@@ -27,7 +31,7 @@ func init() {
 		CREATE TABLE IF NOT EXISTS documents (
 			id SERIAL PRIMARY KEY,
 			content TEXT NOT NULL,
-			embedding VECTOR(768) -- Размерность вектора зависит от модели (например, 768 для Gemini)
+			embedding VECTOR(768)
 		)
 	`)
 	if err != nil {
@@ -42,7 +46,6 @@ func init() {
 	}
 }
 
-// AddDocument добавляет документ в PostgreSQL
 func AddDocument(content string, embedding []float32) error {
 	_, err := pgConn.Exec(context.Background(), `
 		INSERT INTO documents (content, embedding)
@@ -51,7 +54,6 @@ func AddDocument(content string, embedding []float32) error {
 	return err
 }
 
-// SearchDocuments ищет наиболее релевантные документы
 func SearchDocuments(queryEmbedding []float32) (string, error) {
 	var content string
 	err := pgConn.QueryRow(context.Background(), `
@@ -69,7 +71,6 @@ func SearchDocuments(queryEmbedding []float32) (string, error) {
 	return content, nil
 }
 
-// CloseConnection закрывает соединение с PostgreSQL
 func CloseConnection() {
 	if pgConn != nil {
 		pgConn.Close(context.Background())
