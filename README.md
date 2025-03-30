@@ -30,6 +30,6 @@
 1. **Клонируйте репозиторий**:
 
    ```bash
-   git clone https://github.com/Mukam21/RAG_server-Golang.git
+   git clone https://github.com/Mukam21/RAG_servers-Golang.git
    cd RAG_server-Golang
    
