@@ -32,4 +32,6 @@
    ```bash
    git clone https://github.com/Mukam21/RAG_servers-Golang.git
    cd RAG_server-Golang
+   $env:PG_PASSWORD="пароль"
+
    
